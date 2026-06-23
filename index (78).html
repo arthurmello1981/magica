@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Calendário">
+<title>Calendário</title>
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<style>
+  :root{ --red:#ff3b30; --blue:#007aff; --gray:#8e8e93; --line:#e5e5ea; --bg:#fff; --txt:#000; }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;background:var(--bg);color:var(--txt);
+       padding-top:env(safe-area-inset-top);-webkit-user-select:none;user-select:none;}
+  .wrap{max-width:430px;margin:0 auto;padding:0 8px;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:6px 8px 2px;}
+  .topbar .yr{color:var(--red);font-size:17px;display:flex;align-items:center;gap:4px;}
+  .topbar .actions{display:flex;gap:18px;align-items:center;}
+  .topbar .actions span{color:var(--red);font-size:22px;line-height:1;}
+  h1{font-size:34px;font-weight:700;letter-spacing:.4px;margin:2px 6px 4px;text-transform:capitalize;}
+  .nav{display:flex;align-items:center;justify-content:space-between;margin:0 6px 6px;}
+  .nav button{background:none;border:none;color:var(--red);font-size:20px;padding:6px 12px;}
+  .nav .label{font-size:15px;color:var(--gray);}
+  .wk{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;color:var(--gray);
+      font-size:11px;font-weight:600;padding:6px 0;border-bottom:.5px solid var(--line);}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);}
+  .cell{aspect-ratio:1/1.15;display:flex;flex-direction:column;align-items:center;
+        justify-content:flex-start;padding-top:8px;position:relative;}
+  .num{width:30px;height:30px;line-height:30px;text-align:center;border-radius:50%;font-size:18px;}
+  .cell.today .num{background:var(--red);color:#fff;}
+  .cell.sel .num{background:#f0f0f0;}
+  .cell.today.sel .num{background:var(--red);}
+  .cell.out .num{color:#c7c7cc;}
+  .dot{width:6px;height:6px;border-radius:50%;margin-top:3px;}
+  .dot.red{background:var(--red);} .dot.blue{background:var(--blue);}
+  .daylist{border-top:.5px solid var(--line);margin-top:6px;padding:10px 6px;min-height:120px;}
+  .daylist .hd{font-size:13px;color:var(--gray);margin-bottom:8px;text-transform:capitalize;}
+  .ev{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:.5px solid var(--line);}
+  .ev .bar{width:4px;align-self:stretch;min-height:34px;border-radius:2px;}
+  .ev .bar.blue{background:var(--blue);} .ev .bar.red{background:var(--red);}
+  .ev .t{font-size:13px;color:var(--gray);width:64px;}
+  .ev .title{font-size:16px;}
+  .empty{color:#c7c7cc;font-size:14px;text-align:center;padding-top:20px;}
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:10;}
+  .scrim.on{display:block;}
+  .sheet{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:14px 14px 0 0;z-index:11;
+         transform:translateY(100%);transition:transform .25s;
+         padding:14px 16px calc(20px + env(safe-area-inset-bottom));}
+  .sheet.on{transform:translateY(0);}
+  .sheet .sh-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .sheet .sh-top button{background:none;border:none;color:var(--blue);font-size:17px;}
+  .sheet .sh-top .ttl{font-size:17px;font-weight:600;}
+  .sheet input{width:100%;border:none;border-bottom:.5px solid var(--line);
+               font-size:18px;padding:10px 2px;outline:none;font-family:inherit;}
+  .sheet .meta{color:var(--gray);font-size:14px;margin-top:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="yr">&lsaquo; <span id="yr">2026</span></div>
+    <div class="actions"><span onclick="goToday()">&#8981;</span><span onclick="openSheet()">+</span></div>
+  </div>
+  <h1 id="mname">novembro</h1>
+  <div class="nav">
+    <button onclick="shift(-1)">&lsaquo;</button>
+    <div class="label" id="navlbl"></div>
+    <button onclick="shift(1)">&rsaquo;</button>
+  </div>
+  <div class="wk"><div>D</div><div>S</div><div>T</div><div>Q</div><div>Q</div><div>S</div><div>S</div></div>
+  <div class="grid" id="grid"></div>
+  <div class="daylist" id="daylist"></div>
+</div>
+
+<div class="scrim" id="scrim" onclick="closeAll()"></div>
+<div class="sheet" id="sheet">
+  <div class="sh-top">
+    <button onclick="closeAll()">Cancelar</button>
+    <div class="ttl">Novo Evento</div>
+    <button onclick="saveEvent()">Adicionar</button>
+  </div>
+  <input id="evtitle" placeholder="Título" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  <div class="meta" id="sheetdate"></div>
+</div>
+
+<script>
+/* ===================== CONFIG (mexa só aqui) =====================
+   MÉTODO: offset fixo em DIAS. O app planta a revelação OFFSET_DAYS dias
+   DEPOIS da data-isca onde você cria o evento. Aritmética de dias -> nunca
+   cai em data inexistente -> ZERO buracos, todas as 365 datas.
+
+   COMO ACHAR A DATA-ISCA (sem contar dia a dia):
+     com OFFSET_DAYS múltiplo de 7, a isca é o MESMO DIA DA SEMANA do
+     aniversário, X semanas antes. Padrão 42 = 6 semanas: na grade, suba
+     6 linhas a partir do aniversário e toque ali (~mês e meio antes).
+     (Quer bater 45 igual ao vídeo? troque p/ 45 — mas aí conta os dias.)
+
+   PALCO:
+     1) Pergunte o aniversário. Ache a carta no baralho (Stebbins).
+     2) Vá à data-isca (6 linhas acima do aniversário, mesmo dia da semana).
+     3) "+", digite texto aleatório terminando na CARTA (ex "lembrete 4p"). Adicionar.
+     4) Revele: navegue até o aniversário -> evento de dia inteiro, sem hora.
+
+   Carta no fim do título. valor: a 2..10 j q k | naipe: p=paus o=ouros c=copas e=espadas
+   Reset total: SEGURAR 2s no canto inferior direito da tela.                                */
+const OFFSET_DAYS   = 42;            // 42 = 6 semanas (fácil de achar). 45 = "1/10->15/11" do vídeo.
+const REVEAL_PREFIX = "Você escolheu";
+/* ================================================================ */
+
+const VAL={a:"Ás","2":"2","3":"3","4":"4","5":"5","6":"6","7":"7","8":"8","9":"9","10":"10",j:"Valete",q:"Dama",k:"Rei"};
+const SUIT={p:"Paus",o:"Ouros",c:"Copas",e:"Espadas"};
+const ART={q:"a"};
+const MESES=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+
+let view=new Date(), selDay=null;
+const store={data:{},load(){try{this.data=JSON.parse(localStorage.getItem('cal')||'{}');}catch(e){if(!this.data)this.data={};}},
+             save(){try{localStorage.setItem('cal',JSON.stringify(this.data));}catch(e){}}};
+store.load();
+
+const keyOf=(y,m,d)=>y+"-"+m+"-"+d;
+const titleFor=c=>`${REVEAL_PREFIX} ${ART[c.v]||"o"} ${VAL[c.v]} de ${SUIT[c.s]}`;
+
+function findCard(raw){
+  const j=(raw||"").trim().toLowerCase().replace(/\s+/g,'');
+  const m=j.match(/(10|[2-9]|[ajqk])([poce])$/);
+  return m?{v:m[1],s:m[2]}:null;
+}
+
+function render(){
+  const y=view.getFullYear(),m=view.getMonth();
+  document.getElementById('yr').textContent=y;
+  document.getElementById('mname').textContent=MESES[m];
+  document.getElementById('navlbl').textContent=MESES[m]+" "+y;
+  const first=new Date(y,m,1).getDay(),days=new Date(y,m+1,0).getDate(),prevDays=new Date(y,m,0).getDate();
+  const today=new Date(),grid=document.getElementById('grid'); grid.innerHTML="";
+  for(let i=0;i<42;i++){
+    const cell=document.createElement('div'); cell.className="cell";
+    let dy,mm=m,yy=y,out=false;
+    if(i<first){dy=prevDays-first+1+i;mm=m-1;out=true;if(mm<0){mm=11;yy--;}}
+    else if(i>=first+days){dy=i-first-days+1;mm=m+1;out=true;if(mm>11){mm=0;yy++;}}
+    else dy=i-first+1;
+    if(out) cell.classList.add('out');
+    const k=keyOf(yy,mm,dy);
+    if(yy===today.getFullYear()&&mm===today.getMonth()&&dy===today.getDate()) cell.classList.add('today');
+    if(selDay===k) cell.classList.add('sel');
+    const num=document.createElement('div'); num.className="num"; num.textContent=dy; cell.appendChild(num);
+    const evs=store.data[k]||[];
+    if(evs.length){const d=document.createElement('div'); d.className="dot "+(evs[0].color||'red'); cell.appendChild(d);}
+    cell.onclick=()=>{selDay=k;render();};
+    grid.appendChild(cell);
+  }
+  renderDay();
+}
+function renderDay(){
+  const box=document.getElementById('daylist');
+  if(!selDay){box.innerHTML='<div class="empty">Toque num dia</div>';return;}
+  const [y,m,d]=selDay.split('-').map(Number),evs=store.data[selDay]||[];
+  let html=`<div class="hd">${d} de ${MESES[m]}</div>`;
+  if(!evs.length) html+='<div class="empty">Sem eventos</div>';
+  else evs.forEach(e=>{html+=`<div class="ev"><div class="bar ${e.color||'red'}"></div>
+    <div class="t">${e.time||'dia inteiro'}</div><div class="title">${e.title}</div></div>`;});
+  box.innerHTML=html;
+}
+function openSheet(){
+  if(!selDay) selDay=keyOf(view.getFullYear(),view.getMonth(),new Date().getDate());
+  const [y,m,d]=selDay.split('-').map(Number);
+  document.getElementById('sheetdate').textContent=`${d} de ${MESES[m]} de ${y}`;
+  document.getElementById('evtitle').value="";
+  document.getElementById('scrim').classList.add('on');
+  document.getElementById('sheet').classList.add('on');
+  setTimeout(()=>document.getElementById('evtitle').focus(),200);
+}
+function saveEvent(){
+  const raw=document.getElementById('evtitle').value, card=findCard(raw);
+  if(card){
+    const [y,m,d]=selDay.split('-').map(Number);
+    const t=new Date(y,m,d); t.setDate(t.getDate()+OFFSET_DAYS);   // +N dias, exato e sem buraco
+    const k=keyOf(t.getFullYear(),t.getMonth(),t.getDate());
+    (store.data[k]=store.data[k]||[]).push({title:titleFor(card),time:"",color:'blue'}); // dia inteiro
+    store.save();
+  } else if(raw.trim()){
+    (store.data[selDay]=store.data[selDay]||[]).push({title:raw.trim(),time:"",color:'red'});
+    store.save();
+  }
+  closeAll(); render();
+}
+function closeAll(){
+  document.getElementById('scrim').classList.remove('on');
+  document.getElementById('sheet').classList.remove('on');
+}
+function shift(n){view=new Date(view.getFullYear(),view.getMonth()+n,1);render();}
+function goToday(){view=new Date();selDay=keyOf(view.getFullYear(),view.getMonth(),view.getDate());render();}
+
+render();
+
+var RST=null;
+function rstStart(){ RST=setTimeout(function(){ store.data={}; store.save(); selDay=null; render();
+  var f=document.getElementById("rstflash"); f.style.opacity="1"; setTimeout(function(){f.style.opacity="0";},120);
+  RST=null; }, 2000); }
+function rstStop(){ if(RST){clearTimeout(RST);RST=null;} }
+var hz=document.getElementById("resetzone");
+["touchstart","mousedown"].forEach(function(ev){hz.addEventListener(ev,function(e){e.preventDefault();rstStart();});});
+["touchend","touchmove","touchcancel","mouseup","mouseleave"].forEach(function(ev){hz.addEventListener(ev,rstStop);});
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(function(){});}</script>
+<div id="resetzone" style="position:fixed;right:0;bottom:0;width:64px;height:64px;z-index:50;background:transparent;"></div>
+<div id="rstflash" style="position:fixed;inset:0;background:#fff;opacity:0;transition:opacity .12s;pointer-events:none;z-index:49;"></div>
+</body>
+</html>
