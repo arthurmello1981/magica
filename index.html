@@ -107,7 +107,6 @@
    Carta no fim do título. valor: a 2..10 j q k | naipe: p=paus o=ouros c=copas e=espadas
    Reset total: SEGURAR 2s no canto inferior direito da tela.                                */
 const OFFSET_DAYS   = 42;            // 42 = 6 semanas (fácil de achar). 45 = "1/10->15/11" do vídeo.
-const REVEAL_PREFIX = "Você escolheu";
 /* ================================================================ */
 
 const VAL={a:"Ás","2":"2","3":"3","4":"4","5":"5","6":"6","7":"7","8":"8","9":"9","10":"10",j:"Valete",q:"Dama",k:"Rei"};
@@ -115,13 +114,13 @@ const SUIT={p:"Paus",o:"Ouros",c:"Copas",e:"Espadas"};
 const ART={q:"a"};
 const MESES=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 
-let view=new Date(), selDay=null;
+let view=new Date(), selDay=null, swMoved=false;
 const store={data:{},load(){try{this.data=JSON.parse(localStorage.getItem('cal')||'{}');}catch(e){if(!this.data)this.data={};}},
              save(){try{localStorage.setItem('cal',JSON.stringify(this.data));}catch(e){}}};
 store.load();
 
 const keyOf=(y,m,d)=>y+"-"+m+"-"+d;
-const titleFor=c=>`${REVEAL_PREFIX} ${ART[c.v]||"o"} ${VAL[c.v]} de ${SUIT[c.s]}`;
+const titleFor=c=>`Você escolherá ${ART[c.v]||"o"} ${VAL[c.v]} de ${SUIT[c.s]} nesse dia`;
 
 function findCard(raw){
   const j=(raw||"").trim().toLowerCase().replace(/\s+/g,'');
@@ -149,7 +148,7 @@ function render(){
     const num=document.createElement('div'); num.className="num"; num.textContent=dy; cell.appendChild(num);
     const evs=store.data[k]||[];
     if(evs.length){const d=document.createElement('div'); d.className="dot "+(evs[0].color||'red'); cell.appendChild(d);}
-    cell.onclick=()=>{selDay=k;render();};
+    cell.onclick=()=>{if(swMoved)return;selDay=k;render();};
     grid.appendChild(cell);
   }
   renderDay();
@@ -193,20 +192,38 @@ function closeAll(){
 }
 function shift(n){view=new Date(view.getFullYear(),view.getMonth()+n,1);render();}
 function goToday(){view=new Date();selDay=keyOf(view.getFullYear(),view.getMonth(),view.getDate());render();}
+(function(){
+  var w=document.querySelector(".wrap"),sx=0,sy=0;
+  w.addEventListener("touchstart",function(e){var t=e.touches[0];sx=t.clientX;sy=t.clientY;swMoved=false;},{passive:true});
+  w.addEventListener("touchend",function(e){var t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)){swMoved=true;shift(dx<0?1:-1);}},{passive:true});
+})();
 
 render();
 
-var RST=null;
-function rstStart(){ RST=setTimeout(function(){ store.data={}; store.save(); selDay=null; render();
-  var f=document.getElementById("rstflash"); f.style.opacity="1"; setTimeout(function(){f.style.opacity="0";},120);
-  RST=null; }, 2000); }
-function rstStop(){ if(RST){clearTimeout(RST);RST=null;} }
-var hz=document.getElementById("resetzone");
-["touchstart","mousedown"].forEach(function(ev){hz.addEventListener(ev,function(e){e.preventDefault();rstStart();});});
-["touchend","touchmove","touchcancel","mouseup","mouseleave"].forEach(function(ev){hz.addEventListener(ev,rstStop);});
 </script>
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(function(){});}</script>
-<div id="resetzone" style="position:fixed;right:0;bottom:0;width:64px;height:64px;z-index:50;background:transparent;"></div>
-<div id="rstflash" style="position:fixed;inset:0;background:#fff;opacity:0;transition:opacity .12s;pointer-events:none;z-index:49;"></div>
+<script>
+(function(){
+  var zone=document.createElement("div");
+  zone.style.cssText="position:fixed;right:0;bottom:0;width:74px;height:74px;z-index:9999;background:transparent;";
+  document.body.appendChild(zone);
+  var flash=document.createElement("div");
+  flash.style.cssText="position:fixed;left:0;top:0;right:0;bottom:0;background:#fff;opacity:0;transition:opacity .12s;pointer-events:none;z-index:9998;";
+  document.body.appendChild(flash);
+  var timer=null,sx=0,sy=0;
+  function start(x,y){sx=x;sy=y;clearTimeout(timer);timer=setTimeout(fire,1500);}
+  function move(x,y){if(Math.abs(x-sx)>20||Math.abs(y-sy)>20)stop();}
+  function stop(){clearTimeout(timer);timer=null;}
+  function fire(){store.data={};store.save();selDay=null;render();flash.style.opacity="1";setTimeout(function(){flash.style.opacity="0";},120);}
+  zone.addEventListener("touchstart",function(e){var t=e.touches[0];start(t.clientX,t.clientY);},{passive:true});
+  zone.addEventListener("touchmove",function(e){var t=e.touches[0];move(t.clientX,t.clientY);},{passive:true});
+  zone.addEventListener("touchend",stop);
+  zone.addEventListener("touchcancel",stop);
+  zone.addEventListener("mousedown",function(e){start(e.clientX,e.clientY);});
+  zone.addEventListener("mouseup",stop);
+  zone.addEventListener("mouseleave",stop);
+})();
+</script>
 </body>
 </html>
